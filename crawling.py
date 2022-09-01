@@ -1,35 +1,67 @@
-from bs4 import BeautifulSoup
-import urllib.request
+from konlpy.tag import Okt
+from nltk.tokenize import word_tokenize
+import re
 import pandas as pd
-from icecream import ic
+from nltk import FreqDist
+from wordcloud import WordCloud
 import matplotlib.pyplot as plt
-from matplotlib import rc, font_manager
-from collections import defaultdict
+from icecream import ic
+import nltk
 
-rc('font', family=font_manager.FontProperties(fname='C:/Windows/Fonts/malgunsl.ttf').get_name())
-import matplotlib
+from context.domains import File, Reader
 
-matplotlib.rcParams['axes.unicode_minus'] = False
-import numpy as np
-from context.domains import *
-import math
+'''
+문장 형태의 문자 데이터를 전처리할 때 많이 사용되는 방법이다. 
+말뭉치(코퍼스 corpus)를 어떤 토큰의 단위로 분할하냐에 따라 #Interval
+단어 집합의 크기, 단어 집합이 표현하는 토크의 형태가 다르게 나타나며 
+이는 모델의 성능을 좌지우지하기도 한다. 
+
+이때 텍스트를 토큰의 단위로 분할하는 작업을 토큰화라고 한다. (토큰요소 코퍼스의 단위)  word
+토큰의 단위는 보통 의미를 가지는 최소 의미 단위로 선정되며, 단락 \n 의 
+토큰의 단위를 단어로 잡으면 Word Tokenization이라고 하고, 
+문장으로 잡으면 Sentence Tokeniazation이라고 한다. 
+영어는 주로 띄어쓰기 기준으로 나누고, 
+한글은 단어 안의 형태소를 최소 의미 단위로 인식해 적용한다.
+형태소(形態素, 영어: morpheme)는 언어학에서 의미가 있는 가장 작은 말의 단위이다. 모프
+
+형태소는 의미가 있는 워드  코퍼스는 텍스트의 집합
+워드 스페이스바 or 엔터로 나누어져있음 - 형태소가 결합된 상태 (아침에)
+형태소 의미가 있는 워드 (아침 - 실질 형태소/ 에 - 형식 형태소)
+형태소는 실질형태소  
+형식형태소는  날려버려야한다 
+
+텍스트는 워드와 센텐스로 이루어져있음 
+
+코퍼스(영어: corpus) 말뭉치는 언어학에서 주로 구조를 이루고 있는 텍스트 집합이다.
+코퍼스(corpus)는 단어들을 포함한다.
+임베딩(embedding)은 변환한 벡터들이 위치한 공간이다.
+단어(word)는 일반적으로 띄어쓰기나 줄바꿈과 같은 공백 문자(whitespace)로 나뉘어져 있는 문자열의 일부분이다.
+단어를 벡터로 변환하는 경우 단어 임베딩(word embedding)이다. 
+각 문장을 벡터로 변환하는 경우 문장 임베딩(sentence embedding)이다. 
+단어 임베딩이란 앞서 말씀드린 바와 같이 이 각각 하나의 좌표를 가지도록 형성한 벡터공간이다.
+1. Preprocessing : kr-Report_2018.txt 를 읽는다.
+2. Tokenization : 문자열(string)을 다차원 벡터(vector)로 변환
+3. Token Embedding  (Token 단어) 워드 임베딩 단어가 조각조각 난것이 토큰  [나, 비트, 간다]
+4. Document Embedding (Document 문서) s = [ [나 아침 일어났다], [나 비트 간다]] 메트릭스 구조로 바꾼다 
+
+'''
 
 
-class MovieComment(Reader):
-    def __init__(self, k=0.5):
-        self.file = File(context='./save/')
-        self.k = k  # naive_bayes 설정값
-        self.word_probs = []  # naive_bayes 설정값
+class Solution(Reader):
+    def __init__(self):
+        self.okt = Okt()
+        self.file = File()
+        self.file.context = './data/'
 
     def hook(self):
         def print_menu():
             print('0. Exit')
-            print('1. Preprocessing: text mining(Crwaling)')
-            print('2. Preprocessing: Tokenize')
-            print('3. Preprocessing: Embedding')
-            print('4. 다음 영화 댓글이 긍정인지 부정인지 ratio 값으로 판단하시오\n'
-                  '너무 좋아요. 내 인생의 최고의 명장 영화\n'
-                  '이렇게 졸린 영화는 처음이야\n')
+            print('1. Preprocessing')
+            print('2. Tokenization.')
+            print('3. Token Embedding')
+            print('4. Document Embedding')
+            print('5. 2018년 삼성사업계획서를 분석해서 워드클라우드를 작성하시오.')
+            print('9. nltk 다운로드')
             return input('메뉴 선택 \n')
 
         while 1:
@@ -37,244 +69,98 @@ class MovieComment(Reader):
             if menu == '0':
                 break
             elif menu == '1':
-                self.crawling()
+                _ = self.preprocessing()
+                ic(_)
             elif menu == '2':
-                # self.tokenization()
-                pass
+                self.tokenization()
             elif menu == '3':
-                self.preproccess()
+                self.token_embedding()
             elif menu == '4':
-                print(self.naive_bayes_classifier('너무 좋아요. 내 인생의 최고의 명장 영화'))
-                print(self.naive_bayes_classifier('계속 졸았어요 돈이 너무 아깝네요'))
-                print(self.naive_bayes_classifier('시리즈 내용이 다 비슷하네요'))
-                print(self.naive_bayes_classifier('이렇게 졸린거 다신 안봐요'))
-                print(self.naive_bayes_classifier('정말 재미 없어요 다섯번 졸았네요'))
-                print(self.naive_bayes_classifier('보다가 그냥 나왔어요'))
-            else:
-                break
+                self.document_embedding()
+            elif menu == '5':
+                self.draw_wordcloud()
+            elif menu == '6':
+                self.read_stopword()
+            elif menu == '7':
+                self.remove_stopword()
+            elif menu == '8':
+                self.read_stopword()
+            elif menu == '9':
+                Solution.download()
 
-    def crawling(self):
+    @staticmethod
+    def download():
+        nltk.download('punkt')
+
+    def preprocessing(self):
+        self.okt.pos("삼성전자 글로벌센터 전자사업부", stem=True)
         file = self.file
-        file.fname = 'movie_reviews.txt'
-        f = open(self.new_file(file), 'w', encoding='UTF-8')
-
-        for no in range(1, 501):
-            url = 'https://movie.naver.com/movie/point/af/list.naver?&page=%d' % no
-            html = urllib.request.urlopen(url)
-            soup = BeautifulSoup(html, 'html.parser')
-
-            reviews = soup.select('tbody > tr > td.title')
-            for rev in reviews:
-                rev_lst = []
-                title = rev.select_one('a.movie').text.strip()
-                score = rev.select_one('div.list_netizen_score > em').text.strip()
-                comment = rev.select_one('br').next_sibling.strip()
-
-                # -- 긍정/부정 리뷰 레이블 설정
-                if int(score) >= 8:
-                    label = 1  # -- 긍정 리뷰 (8~10점)
-                elif int(score) <= 4:
-                    label = 0  # -- 부정 리뷰 (0~4점)
-                else:
-                    label = 2
-
-                f.write(f'{title}\t{score}\t{comment}\t{label}\n')
-        f.close()
-
-    def stereotype(self):
-        file = self.file
-        file.fname = 'movie_reviews.txt'
-        return pd.read_csv(self.new_file(file), delimiter='\t',
-                           names=['title', 'score', 'comment', 'label'])
-
-    def preproccess(self):
-        df = self.stereotype()
-        df = self.drop_garvage(df)
-        # self.analyze_reviews(df)
-        self.visualize_reviews(df)
-
-        return df
-
-    @staticmethod
-    def drop_garvage(df):
-        # ic(df.info())
-        ''' RangeIndex: 5000 entries, 0 to 4999
-            Data columns (total 4 columns):
-             #   Column   Non-Null Count  Dtype
-            ---  ------   --------------  -----
-             0   title    5000 non-null   object
-             1   score    5000 non-null   int64
-             2   comment  4683 non-null   object
-             3   label    5000 non-null   int64
-             comment에 null값이 있고, 중복되는 부분도 있기 때문에 이를 제거해준다.
-        '''
-        df_reviews = df.dropna()
-        df_reviews = df_reviews.drop_duplicates(['comment'])
-        return df_reviews
-
-    @staticmethod
-    def analyze_reviews(df):
-        movie_lst = df.title.unique()
-        print('전체 영화 편수 =', len(movie_lst))
-        print(movie_lst[:10])
-        cnt_movie_reviews = df.title.value_counts()
-        print(cnt_movie_reviews[:20])
-        # info_movie = df.groupby('title')['score'].describe()
-        # info_movie.sort_values(by=['count'], axis=0, ascending=False)
-        # ic(info_movie)
-        # 아래 람다로 대체
-        ic((lambda a, b: df.groupby(a)[b].describe())('title', 'score').sort_values(by=['count'], axis=0,
-                                                                                    ascending=False))
-
-    @staticmethod
-    def visualize_reviews(df):
-        top10 = df.title.value_counts().sort_values(ascending=False)[:10]
-        top10_title = top10.index.tolist()
-        top10_reviews = df[df['title'].isin(top10_title)]
-        print(top10_title)
-        print(top10_reviews.info())
-
-        movie_title = top10_reviews.title.unique().tolist()  # -- 영화 제목 추출
-        avg_score = {}  # -- {제목 : 평균} 저장
-        for t in movie_title:
-            avg = top10_reviews[top10_reviews['title'] == t]['score'].mean()
-            avg_score[t] = avg
-
-        plt.figure(figsize=(10, 5))
-        plt.title('영화 평균 평점 (top 10: 리뷰 수)\n', fontsize=17)
-        plt.xlabel('영화 제목')
-        plt.ylabel('평균 평점')
-        plt.xticks(rotation=20)
-
-        for x, y in avg_score.items():
-            color = np.array_str(np.where(y == max(avg_score.values()), 'orange', 'lightgrey'))
-            plt.bar(x, y, color=color)
-            plt.text(x, y, '%.2f' % y,
-                     horizontalalignment='center',
-                     verticalalignment='bottom')
-        plt.show()
-        MovieComment.rating_distribution(top10, avg_score)
-
-    @staticmethod
-    def rating_distribution(top_10, avg_score):
-        fig, axs = plt.subplots(5, 2, figsize=(15, 25))
-        axs = axs.flatten()
-
-        for title, avg, ax in zip(avg_score.keys(), avg_score.values(), axs):
-            num_reviews = len(top_10[top_10['title'] == title])
-            x = np.arange(num_reviews)
-            y = top_10[top_10['title'] == title]['score']
-            ax.set_title('\n%s (%d명)' % (title, num_reviews), fontsize=15)
-            ax.set_ylim(0, 10.5, 2)
-            ax.plot(x, y, 'o')
-            ax.axhline(avg, color='red', linestyle='--')  # -- 평균 점선 나타내기
-
-        plt.show()
-
-        fig, axs = plt.subplots(5, 2, figsize=(15, 25))
-        axs = axs.flatten()
-        colors = ['pink', 'gold', 'whitesmoke']
-        labels = ['1 (8~10점)', '0 (1~4점)', '2 (5~7점)']
-
-        for title, ax in zip(avg_score.keys(), axs):
-            num_reviews = len(top_10[top_10['title'] == title])
-            values = top_10[top_10['title'] == title]['label'].value_counts()
-            ax.set_title('\n%s (%d명)' % (title, num_reviews), fontsize=15)
-            ax.pie(values,
-                   autopct='%1.1f%%',
-                   colors=colors,
-                   shadow=True,
-                   startangle=90)
-            ax.axis('equal')
-        plt.show()
-
-    def naive_bayes_classifier(self, doc):
-        file = self.file
-        file.fname = 'movie_reviews.txt'
+        file.fname = 'kr-Report_2018.txt'
         path = self.new_file(file)
-        training_set = self.load_corpus(path)
-        word_probs = self.train(training_set)
-        point = self.classify(word_probs, doc)
-        return self.postprocess(point)
+        with open(path, 'r', encoding='utf-8') as f:
+            texts = f.read()
+        texts = texts.replace('\n', ' ')
+        tokenizer = re.compile(r'[^ㄱ-힣]+')
+        return tokenizer.sub(' ', texts)
 
-    @staticmethod
-    def load_corpus(path):
-        corpus = pd.read_table(path, names=['title', 'point', 'doc', 'label'], encoding='UTF-8')
-        corpus.drop(labels=['title', 'label'], axis=1, inplace=True)
-        corpus.dropna(inplace=True)
-        corpus.drop_duplicates(inplace=True)
-        corpus = np.array(corpus)
-        return corpus
+    def tokenization(self):
+        noun_tokens = []
+        tokens = word_tokenize(self.preprocessing())
+        # ic(tokens[:100])
+        for i in tokens:
+            pos = self.okt.pos(i)
+            _ = [j[0] for j in pos if j[1] == 'Noun']
+            if len(''.join(_)) > 1:
+                noun_tokens.append(' '.join(_))
+        texts = ' '.join(noun_tokens)
+        ic(texts[:100])
+        return texts
 
-    def count_words(self, training_set):
-        counts = defaultdict(lambda: [0, 0])
-        for point, doc in training_set:
-            # 영화리뷰가 text 일때만 카운드
-            if self.isNumber(doc) is False:
-                # 리뷰를 띄어쓰기 단위로 토크나이징
-                words = doc.split()
-                for word in words:
-                    counts[word][0 if point > 7 else 1] += 1
-        return counts
+    def read_stopword(self):
+        self.okt.pos("삼성전자 글로벌센터 전자사업부", stem=True)
+        file = self.file
+        file.fname = 'stopwords.txt'
+        path = self.new_file(file)
+        with open(path, 'r', encoding='utf-8') as f:
+            texts = f.read()
+        ic(texts)
 
-    @staticmethod
-    def isNumber(s):
-        try:
-            float(s)
-            return True
-        except ValueError:
-            return False
+        return texts
 
-    def word_probabilities(self, counts, total_class0, total_class1, k):
-        """pass"""
-        # 단어의 빈도수를 [단어, p(w|긍정), p(w|부정)] 형태로 변환
-        return [(w, (class0 + k) / (total_class0 + 2 * k), (class1 + k) / (total_class1 + 2 * k)) for
-                w, (class0, class1) in counts.items()]
+    def remove_stopword(self):
+        tokens = self.tokenization()
+        stopwords = self.read_stopword().split(' ')
+        texts = [text for text in tokens if text not in stopwords]
+        return texts  # 임베딩에 리턴타입은 벡터 임베딩 = 자연어를 벡터로 바꾼것 이미지를 벡터로 바꾼거 음표를 벡터로 바꾼것 소리를 벡터로 바꾼것 임베딩이란것은 내부적으로 리스트
+        # 컴프리핸션을 사용한다
+        # for i in tokens:
+        #     if i not in stopwords:
+        #         texts.append(i)
+        # print(texts, '\n')
 
-    def train(self, training_set):
-        print('-------------- 훈련 시작 --------')
-        # 범주0 (긍정) 과 범주1(부정) 문서의 수를 세어줌
-        num_class0 = len([1 for point, _ in training_set if point > 7])
-        num_class1 = len(training_set) - num_class0
-        # train
-        word_counts = self.count_words(training_set)
-        return self.word_probabilities(word_counts, num_class0, num_class1, self.k)
+    def token_embedding(self) -> []:
+        tokens = self.tokenization()
+        stopwords = self.read_stopword()
+        texts = [text for text in tokens.split() if text not in stopwords.split()]
+        return texts
 
-    def classify(self, word_probs, doc):
-        return self.class0_probability(word_probs, doc)
+    # def find_freq(self):
+    #
 
-    @staticmethod
-    def class0_probability(word_probs, doc):
-        # 별도 토크나이즈 하지 않고 띄어쓰기만
-        print(f'코멘트 : {doc}', end='\t\t\t')
-        docwords = doc.split()
-        # 초기값은 모두 0으로 처리
-        log_prob_if_class0 = log_prob_if_class1 = 0.0
-        # 모든 단어에 대해 반복
-        for word, prob_if_class0, prob_if_class1 in word_probs:
-            # 만약 리뷰에 word 가 나타나면 해당 단어가 나올 log 에 확률을 더 해줌
-            if word in docwords:
-                log_prob_if_class0 += math.log(prob_if_class0)
-                log_prob_if_class1 += math.log(prob_if_class1)
-            # 만약 리뷰에 word 가 나타나지 않는다면
-            # 해당 단어가 나오지 않을 log 에 확률을 더해줌
-            # 나오지 않을 확률은 log(1 - 나올 확률) 로 계산
-            else:
-                log_prob_if_class0 += math.log(1.0 - prob_if_class0)
-                log_prob_if_class1 += math.log(1.0 - prob_if_class1)
-        prob_if_class0 = math.exp(log_prob_if_class0)
-        prob_if_class1 = math.exp(log_prob_if_class1)
-        return prob_if_class0 / (prob_if_class0 + prob_if_class1)
+    def draw_wordcloud(self):
+        _ = self.token_embedding()
+        freqtxt = pd.Series(dict(FreqDist(_))).sort_values(ascending=False)
+        ic(freqtxt)
+        wcloud = WordCloud('./data/D2Coding.ttf', relative_scaling=0.2,
+                           background_color='white').generate(" ".join(_))
+        plt.figure(figsize=(12, 12))
+        plt.imshow(wcloud, interpolation='bilinear')
+        plt.axis('off')
+        plt.show()
 
-    @staticmethod
-    def postprocess(point):
-        if point > 0.8:
-            return f'토마토 싱싱하네요. 평점 : {round(point * 10, 2)}'
-        elif point > 0.5:
-            return f'토마토 맛없어요. 평점 : {round(point*10, 2)}'
-        else:
-            return f'토마토 썩었습니다. 평점 : {round(point*10, 2)}'
+    def document_embedding(self):
+        pass
 
 
 if __name__ == '__main__':
-    MovieComment().hook()
+    Solution().hook()
